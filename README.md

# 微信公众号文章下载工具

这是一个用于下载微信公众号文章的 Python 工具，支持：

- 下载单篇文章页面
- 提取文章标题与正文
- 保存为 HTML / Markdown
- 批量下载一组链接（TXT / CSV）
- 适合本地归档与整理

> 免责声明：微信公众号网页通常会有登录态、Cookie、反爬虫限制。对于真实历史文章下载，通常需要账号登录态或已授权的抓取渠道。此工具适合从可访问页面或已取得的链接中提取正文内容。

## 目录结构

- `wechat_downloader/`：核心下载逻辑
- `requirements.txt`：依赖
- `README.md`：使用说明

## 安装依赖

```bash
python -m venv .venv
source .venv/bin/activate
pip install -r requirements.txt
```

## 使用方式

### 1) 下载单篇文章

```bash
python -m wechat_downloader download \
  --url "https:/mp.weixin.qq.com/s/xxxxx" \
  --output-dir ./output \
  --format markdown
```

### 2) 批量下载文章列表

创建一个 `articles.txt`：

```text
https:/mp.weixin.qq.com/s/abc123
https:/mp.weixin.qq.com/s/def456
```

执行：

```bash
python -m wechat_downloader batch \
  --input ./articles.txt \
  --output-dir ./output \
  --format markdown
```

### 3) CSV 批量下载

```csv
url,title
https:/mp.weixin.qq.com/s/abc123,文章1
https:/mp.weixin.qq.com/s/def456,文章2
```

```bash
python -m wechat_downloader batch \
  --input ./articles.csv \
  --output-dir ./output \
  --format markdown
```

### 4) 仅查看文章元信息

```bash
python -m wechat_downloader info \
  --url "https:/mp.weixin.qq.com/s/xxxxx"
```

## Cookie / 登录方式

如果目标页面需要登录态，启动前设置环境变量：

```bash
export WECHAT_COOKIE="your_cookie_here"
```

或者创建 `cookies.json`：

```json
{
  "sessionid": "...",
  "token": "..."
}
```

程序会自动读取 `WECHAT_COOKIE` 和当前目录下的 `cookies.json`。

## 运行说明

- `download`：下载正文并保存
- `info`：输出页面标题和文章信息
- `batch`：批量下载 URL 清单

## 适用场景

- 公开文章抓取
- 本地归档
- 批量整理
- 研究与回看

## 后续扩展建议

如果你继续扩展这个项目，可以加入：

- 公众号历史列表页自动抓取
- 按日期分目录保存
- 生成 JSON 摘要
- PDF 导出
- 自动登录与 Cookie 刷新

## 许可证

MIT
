@@ -1,0 +1,75 @@
+from __future__ import annotations
+
+import sys
+
+import click
+
+from .downloader import WechatArticleDownloader
+from .history import WechatHistoryDownloader
+
+
+@click.group()
+def cli() -> None:
+    """微信公众号文章下载工具。"""
+
+
+@cli.command()
+@click.option("--url", required=True, help="文章链接")
+@click.option("--output-dir", default="output", show_default=True, help="输出目录")
+@click.option("--format", type=click.Choice(["markdown", "html"]), default="markdown", show_default=True, help="保存格式")
+def download(url: str, output_dir: str, format: str) -> None:
+    """下载单篇微信公众号文章并保存。"""
+    try:
+        downloader = WechatArticleDownloader()
+        article = downloader.download(url, output_dir=output_dir, fmt=format)
+        click.echo(f"标题: {article.title}")
+        click.echo(f"保存路径: {article.saved_path}")
+    except Exception as exc:  # pragma: no cover - CLI error handler
+        click.echo(f"下载失败: {exc}", err=True)
+        sys.exit(1)
+
+
+@cli.command()
+@click.option("--url", required=True, help="文章链接")
+def info(url: str) -> None:
+    """分析文章页面并输出标题与信息。"""
+    try:
+        downloader = WechatArticleDownloader()
+        html = downloader.fetch(url)
+        article = downloader.parse(html, url)
+        click.echo(f"标题: {article.title}")
+        click.echo(f"链接: {article.url}")
+        click.echo(f"正文长度: {len(article.markdown)}")
+    except Exception as exc:  # pragma: no cover - CLI error handler
+        click.echo(f"分析失败: {exc}", err=True)
+        sys.exit(1)
+
+
+@cli.command()
+@click.option("--input", "input_path", required=True, help="URL 列表文件；支持 .txt 或 .csv")
+@click.option("--output-dir", default="output", show_default=True, help="输出目录")
+@click.option("--format", type=click.Choice(["markdown", "html"]), default="markdown", show_default=True, help="保存格式")
+def batch(input_path: str, output_dir: str, format: str) -> None:
+    """批量下载一组文章链接。"""
+    try:
+        path = input_path
+        history = WechatHistoryDownloader()
+
+        if path.lower().endswith(".csv"):
+            results = history.download_csv(path, output_dir=output_dir, fmt=format)
+        else:
+            with open(path, "r", encoding="utf-8") as fh:
+                urls = [line.strip() for line in fh if line.strip()]
+            results = history.download_urls(urls, output_dir=output_dir, fmt=format)
+
+        click.echo(f"已下载 {len(results)} 篇文章")
+        for item in results:
+            if item:
+                click.echo(item)
+    except Exception as exc:  # pragma: no cover - CLI error handler
+        click.echo(f"批量下载失败: {exc}", err=True)
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    cli()
