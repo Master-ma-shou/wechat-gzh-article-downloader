@@ -1,0 +1,118 @@
+# 微信公众号文章下载工具
+
+这是一个用于下载微信公众号文章的 Python 工具，支持：
+
+- 下载单篇文章页面
+- 提取文章标题与正文
+- 保存为 HTML / Markdown
+- 批量导出一组文章链接
+- 从公众号历史列表页中提取文章 URL 并下载
+
+> 免责声明：微信公众号页面通常会要求登录态、Cookie 或有反爬限制。该工具适合在你已经获得文章链接、登录态或可访问历史列表页的前提下进行内容归档与本地备份。
+
+## 目录结构
+
+- `wechat_downloader/`：核心代码
+- `requirements.txt`：依赖
+- `examples/`：示例文件
+- `README.md`：使用说明
+
+## 安装依赖
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+## 使用方式
+
+### 1) 下载单篇文章
+
+```bash
+python -m wechat_downloader download \
+  --url "https://mp.weixin.qq.com/s/xxxxx" \
+  --output-dir ./output \
+  --format markdown
+```
+
+### 2) 批量下载文章列表
+
+创建 `examples/articles.txt`，内容如下：
+
+```text
+https://mp.weixin.qq.com/s/abc123
+https://mp.weixin.qq.com/s/def456
+```
+
+执行：
+
+```bash
+python -m wechat_downloader batch \
+  --input ./examples/articles.txt \
+  --output-dir ./output \
+  --format markdown
+```
+
+### 3) 从微信公众号历史列表页抓取文章链接并下载
+
+如果你已经拿到公众号的历史文章列表页链接（如某个历史消息列表页面或可访问的文章目录页）：
+
+```bash
+python -m wechat_downloader history \
+  --url "https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=..." \
+  --output-dir ./output \
+  --format markdown \
+  --limit 20
+```
+
+### 4) 仅查看文章元信息
+
+```bash
+python -m wechat_downloader info \
+  --url "https://mp.weixin.qq.com/s/xxxxx"
+```
+
+## 登录方式
+
+如果目标页面需要登录态，可设置环境变量：
+
+```bash
+export WECHAT_COOKIE="your_cookie_here"
+```
+
+或在项目根目录创建 `cookies.json`：
+
+```json
+{
+  "sessionid": "...",
+  "token": "..."
+}
+```
+
+程序会自动读取 `WECHAT_COOKIE` 和当前目录下的 `cookies.json`。
+
+## 命令说明
+
+- `download`：下载单篇文章并保存
+- `info`：提���页面标题和正文长度
+- `batch`：批量下载 URL 清单
+- `history`：从历史列表页提取链接后批量下载
+
+## 适用场景
+
+- 公开文章抓取
+- 本地归档
+- 批量整理与备份
+- 公众号内容研究
+
+## 未来扩展建议
+
+- 自动访问公众号历史列表页并分页抓取
+- 按日期目录保存文章
+- 导出 PDF / JSON / HTML
+- 自动 Cookie 刷新和登录会话维护
+
+## 开源协议
+
+MIT

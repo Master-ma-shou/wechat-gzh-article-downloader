@@ -1,0 +1,365 @@
+from __future__ import annotations
+
+import csv
+import re
+from pathlib import Path
+from typing import Iterable, List, Optional
+
+from .downloader import WechatArticleDownloader
+
+
+class WechatHistoryDownloader:
+    """从列表页或文本清单中提取文章链接并批量下载。"""
+
+    def __init__(self, cookie: Optional[str] = None, timeout: int = 20):
+        self.downloader = WechatArticleDownloader(cookie=cookie, timeout=timeout)
+
+    @staticmethod
+    def _clean_urls(raw_urls: Iterable[str]) -> List[str]:
+        seen = set()
+        result = []
+        for value in raw_urls:
+            url = str(value).strip()
+            if not url or url.startswith("javascript:"):
+                continue
+            if url.startswith("//"):
+                url = "https:" + url
+            if url.startswith("/"):
+                url = "https://mp.weixin.qq.com" + url
+            if "mp.weixin.qq.com" not in url and "weixin.qq.com" not in url:
+                continue
+            if url not in seen:
+                seen.add(url)
+                result.append(url)
+        return result
+
+    def extract_urls_from_html(self, html: str) -> List[str]:
+        import re
+
+        pattern = r'https?://(?:mp\.weixin\.qq\.com|weixin\.qq\.com)[^\s"\'>)]+(?:/s/[^\s"\'>)]+|/mp/appmsg/show\?[^\s"\'>)]+|/mp/appmsgalbum[^\s"\'>)]+)'
+        urls = re.findall(pattern, html)
+        return self._clean_urls(urls)
+
+    def fetch_history_links(self, url: str, limit: Optional[int] = None) -> List[str]:
+        html = self.downloader.fetch(url)
+        urls = self.extract_urls_from_html(html)
+        if limit is not None:
+            urls = urls[:limit]
+        return urls
+
+    def download_history_page(self, url: str, output_dir: str = "output", fmt: str = "markdown", limit: Optional[int] = None) -> List[str]:
+        urls = self.fetch_history_links(url, limit=limit)
+        return self.downloader.download_many(urls, output_dir=output_dir, fmt=fmt)
+
+    def download_history_file(self, file_path: str, output_dir: str = "output", fmt: str = "markdown") -> List[str]:
+        path = Path(file_path)
+        if not path.exists():
+            raise FileNotFoundError(f"输入文件未找到: {file_path}")
+
+        urls = []
+        if path.suffix.lower() == ".csv":
+            with path.open("r", encoding="utf-8", newline="") as fh:
+                reader = csv.DictReader(fh)
+                for row in reader:
+                    for key in ("url", "link", "article_url", "href"):
+                        if key in row and row[key]:
+                            urls.append(row[key].strip())
+        else:
+            with path.open("r", encoding="utf-8") as fh:
+                for line in fh:
+                    value = line.strip()
+                    if value:
+                        urls.append(value)
+
+        urls = self._clean_urls(urls)
+        return self.downloader.download_many(urls, output_dir=output_dir, fmt=fmt)
+
+
+__all__ = ["WechatHistoryDownloader"]
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

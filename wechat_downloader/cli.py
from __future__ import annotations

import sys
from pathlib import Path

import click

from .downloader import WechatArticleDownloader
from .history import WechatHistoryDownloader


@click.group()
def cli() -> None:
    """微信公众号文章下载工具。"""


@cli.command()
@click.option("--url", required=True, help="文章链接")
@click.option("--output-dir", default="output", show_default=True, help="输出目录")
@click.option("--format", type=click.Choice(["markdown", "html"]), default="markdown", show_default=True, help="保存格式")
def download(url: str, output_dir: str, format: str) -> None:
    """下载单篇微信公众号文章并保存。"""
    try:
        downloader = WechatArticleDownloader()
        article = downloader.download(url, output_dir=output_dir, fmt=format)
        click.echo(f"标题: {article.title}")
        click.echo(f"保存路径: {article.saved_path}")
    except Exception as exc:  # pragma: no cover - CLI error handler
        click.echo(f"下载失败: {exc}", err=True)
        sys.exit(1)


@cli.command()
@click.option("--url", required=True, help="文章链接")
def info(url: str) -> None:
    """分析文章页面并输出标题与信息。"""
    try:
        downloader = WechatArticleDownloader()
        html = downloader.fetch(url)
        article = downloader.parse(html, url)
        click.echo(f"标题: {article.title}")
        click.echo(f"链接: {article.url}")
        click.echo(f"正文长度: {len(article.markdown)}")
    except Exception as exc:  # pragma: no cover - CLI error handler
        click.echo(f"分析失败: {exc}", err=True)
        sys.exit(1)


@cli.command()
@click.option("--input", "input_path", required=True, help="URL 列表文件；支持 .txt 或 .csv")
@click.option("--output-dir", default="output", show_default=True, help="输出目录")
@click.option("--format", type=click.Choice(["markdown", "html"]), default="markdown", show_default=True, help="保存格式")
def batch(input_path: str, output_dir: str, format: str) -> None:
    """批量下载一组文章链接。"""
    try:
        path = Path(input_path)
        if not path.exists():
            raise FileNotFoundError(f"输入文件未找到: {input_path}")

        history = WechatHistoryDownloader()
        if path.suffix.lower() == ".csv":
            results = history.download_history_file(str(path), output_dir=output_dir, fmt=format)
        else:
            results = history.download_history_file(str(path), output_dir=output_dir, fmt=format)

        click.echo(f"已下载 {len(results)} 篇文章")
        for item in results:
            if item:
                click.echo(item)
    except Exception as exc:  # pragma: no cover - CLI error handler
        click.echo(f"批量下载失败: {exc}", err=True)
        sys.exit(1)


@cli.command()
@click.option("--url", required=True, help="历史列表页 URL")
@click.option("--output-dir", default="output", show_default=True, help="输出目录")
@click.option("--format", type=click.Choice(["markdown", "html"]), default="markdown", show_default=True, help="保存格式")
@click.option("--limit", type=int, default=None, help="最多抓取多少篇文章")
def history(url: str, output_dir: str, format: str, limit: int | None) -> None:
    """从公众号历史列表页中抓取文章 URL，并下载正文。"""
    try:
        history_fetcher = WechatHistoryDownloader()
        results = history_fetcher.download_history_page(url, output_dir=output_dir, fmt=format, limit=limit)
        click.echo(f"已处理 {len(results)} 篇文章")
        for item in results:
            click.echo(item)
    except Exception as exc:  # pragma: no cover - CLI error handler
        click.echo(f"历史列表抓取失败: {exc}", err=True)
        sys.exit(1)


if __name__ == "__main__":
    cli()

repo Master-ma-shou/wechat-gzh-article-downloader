@@ -1,0 +1,610 @@
+from __future__ import annotations
+
+import json
+import os
+from dataclasses import dataclass
+from html import unescape
+from pathlib import Path
+from typing import Iterable, List, Optional
+
+import requests
+from bs4 import BeautifulSoup
+from markdownify import markdownify as md
+
+
+@dataclass
+class ArticleMeta:
+    title: str
+    url: str
+    html: str
+    markdown: str
+    saved_path: Optional[str] = None
+
+
+class WechatArticleDownloader:
+    """下载单篇微信公众号文章并提取正文。"""
+
+    def __init__(self, timeout: int = 20, cookie: Optional[str] = None):
+        self.timeout = timeout
+        self.cookie = cookie or os.getenv("WECHAT_COOKIE")
+        self.session = requests.Session()
+        self._apply_cookie_from_file()
+
+    def _apply_cookie_from_file(self) -> None:
+        cookie_path = Path("cookies.json")
+        if cookie_path.exists():
+            try:
+                with cookie_path.open("r", encoding="utf-8") as fh:
+                    data = json.load(fh)
+                if isinstance(data, dict):
+                    self.session.cookies.update(data)
+            except Exception:
+                pass
+
+    def _make_headers(self) -> dict:
+        headers = {
+            "User-Agent": (
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/124.0.0.0 Safari/537.36"
+            ),
+            "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        }
+        if self.cookie:
+            headers["Cookie"] = self.cookie
+        return headers
+
+    def fetch(self, url: str) -> str:
+        response = self.session.get(url, headers=self._make_headers(), timeout=self.timeout)
+        response.raise_for_status()
+        return response.text
+
+    def _extract_title(self, soup: BeautifulSoup) -> str:
+        title_tag = soup.select_one("meta[property='og:title']") or soup.select_one("meta[name='og:title']")
+        if title_tag and title_tag.get("content"):
+            return unescape(title_tag["content"]).strip()
+
+        h1 = soup.select_one("h1")
+        if h1:
+            return unescape(h1.get_text(" ", strip=True))
+
+        title = soup.title.get_text(" ", strip=True) if soup.title else "untitled"
+        return unescape(title)
+
+    def _extract_content_block(self, soup: BeautifulSoup):
+        selectors = [
+            "#js_content",
+            ".rich_media_content",
+            "div.rich_media_content",
+            "div#content",
+            "article",
+        ]
+        for selector in selectors:
+            node = soup.select_one(selector)
+            if node is not None:
+                return node
+        return None
+
+    def parse(self, html: str, url: str) -> ArticleMeta:
+        soup = BeautifulSoup(html, "lxml")
+        title = self._extract_title(soup)
+        content_node = self._extract_content_block(soup)
+
+        if content_node is None:
+            raise ValueError("无法从页面中识别文章正文，请检查网页是否需要登录或 Cookie。")
+
+        content_html = str(content_node)
+        markdown = md(content_html, heading_style="ATX")
+        markdown = markdown.strip() or ""
+        return ArticleMeta(title=title, url=url, html=content_html, markdown=markdown)
+
+    def save(self, article: ArticleMeta, output_dir: str = "output", fmt: str = "markdown") -> str:
+        output_path = Path(output_dir)
+        output_path.mkdir(parents=True, exist_ok=True)
+
+        safe_name = "".join(ch if ch.isalnum() or ch in ("-", "_") else "_" for ch in article.title[:80])
+        if not safe_name:
+            safe_name = "article"
+
+        if fmt == "html":
+            save_path = output_path / f"{safe_name}.html"
+            save_path.write_text(article.html, encoding="utf-8")
+        else:
+            save_path = output_path / f"{safe_name}.md"
+            save_path.write_text(f"# {article.title}\n\n{article.markdown}", encoding="utf-8")
+
+        article.saved_path = str(save_path)
+        return str(save_path)
+
+    def download(self, url: str, output_dir: str = "output", fmt: str = "markdown") -> ArticleMeta:
+        html = self.fetch(url)
+        article = self.parse(html, url)
+        self.save(article, output_dir=output_dir, fmt=fmt)
+        return article
+
+    def download_many(self, urls: Iterable[str], output_dir: str = "output", fmt: str = "markdown") -> List[str]:
+        results = []
+        for url in urls:
+            url = str(url).strip()
+            if not url:
+                continue
+            article = self.download(url, output_dir=output_dir, fmt=fmt)
+            results.append(article.saved_path or url)
+        return results
+
+
+if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser(description="微信文章下载器")
+    parser.add_argument("--url", required=True, help="文章链接")
+    parser.add_argument("--output-dir", default="output", help="输出目录")
+    parser.add_argument("--format", choices=["markdown", "html"], default="markdown", help="保存格式")
+    args = parser.parse_args()
+
+    downloader = WechatArticleDownloader()
+    article = downloader.download(args.url, output_dir=args.output_dir, fmt=args.format)
+    print(f"Title: {article.title}")
+    print(f"Saved to: {article.saved_path}")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

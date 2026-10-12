@@ -1,0 +1,103 @@
+from __future__ import annotations
+
+import re
+from dataclasses import dataclass
+from html import unescape
+from typing import Iterable, List, Optional
+
+from bs4 import BeautifulSoup
+
+
+@dataclass
+class ArticleRecord:
+    title: str
+    url: str
+    source: str = "history"
+
+
+class WechatHistoryParser:
+    """从公众号历史列表页中提取文章链接。"""
+
+    @staticmethod
+    def normalize_url(raw: str) -> Optional[str]:
+        if not raw:
+            return None
+        url = raw.strip()
+        if "javascript:" in url.lower() or url.startswith("#"):
+            return None
+        if url.startswith("//"):
+            url = "https:" + url
+        if url.startswith("/"):
+            url = "https://mp.weixin.qq.com" + url
+        if "mp.weixin.qq.com" not in url and "weixin.qq.com" not in url:
+            return None
+        return url
+
+    @classmethod
+    def extract_urls_from_html(cls, html: str) -> List[str]:
+        soup = BeautifulSoup(html, "lxml")
+        hrefs = []
+
+        for a in soup.find_all("a", href=True):
+            link = cls.normalize_url(a["href"])
+            if link:
+                hrefs.append(link)
+
+        seen = set()
+        urls = []
+        for url in hrefs:
+            if url in seen:
+                continue
+            seen.add(url)
+            urls.append(url)
+        return urls
+
+    @staticmethod
+    def extract_title_from_link(url: str) -> str:
+        match = re.search(r"(?:/s/|/mp/appmsg/show\?__biz=)[^?&]+", url)
+        if match:
+            return match.group(0).split("/")[-1] or "wechat_article"
+        return "wechat_article"
+
+
+class WechatHistoryDownloader:
+    """从历史页面提取并下载链接。"""
+
+    def __init__(self, cookie: Optional[str] = None, timeout: int = 20):
+        from .downloader import WechatArticleDownloader
+
+        self.downloader = WechatArticleDownloader(cookie=cookie, timeout=timeout)
+        self.parser = WechatHistoryParser()
+
+    def fetch_history_links(self, url: str, limit: Optional[int] = None) -> List[str]:
+        html = self.downloader.fetch(url)
+        links = self.parser.extract_urls_from_html(html)
+        if limit is not None:
+            links = links[:limit]
+        return links
+
+    def download_history_page(self, url: str, output_dir: str = "output", fmt: str = "markdown", limit: Optional[int] = None) -> List[str]:
+        links = self.fetch_history_links(url, limit=limit)
+        saved = []
+        for link in links:
+            try:
+                item = self.downloader.download(link, output_dir=output_dir, fmt=fmt)
+                saved.append(item.saved_path or link)
+            except Exception:
+                saved.append(link)
+        return saved
+
+    def download_history_file(self, file_path: str, output_dir: str = "output", fmt: str = "markdown") -> List[str]:
+        from pathlib import Path
+
+        text_file = Path(file_path)
+        if not text_file.exists():
+            raise FileNotFoundError(f"History file not found: {file_path}")
+
+        urls = []
+        for line in text_file.read_text(encoding="utf-8").splitlines():
+            stripped = line.strip()
+            if stripped:
+                urls.append(stripped)
+
+        return self.downloader.download_many(urls, output_dir=output_dir, fmt=fmt)
